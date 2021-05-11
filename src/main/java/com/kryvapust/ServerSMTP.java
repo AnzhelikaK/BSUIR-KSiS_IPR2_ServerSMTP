@@ -9,34 +9,51 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class ServerSMTP {
-    BufferedReader reader;
-    BufferedWriter writer;
+    BufferedReader reader; // объекта для чтения потока символов входящих сообщений от клиента
+    BufferedWriter writer; // объект для отправки потока символов сообщения клиенту
 
     public void start() {
-        int port = 8082;
+        int port = 25; // порт smtp сервера
         try {
-            ServerSocket serverSocket = new ServerSocket(port);
+            ServerSocket serverSocket = new ServerSocket(port); // создание локального сервера на порту 25
             System.out.printf("SMTP Server started on %d port%n", port);
             while (true) {
-                Socket clientSocket = serverSocket.accept();
+                Socket clientSocket = serverSocket.accept(); // создание сокета клиента
+                // инициализация на основании сокета клиента объекта для чтения потока символов от клиента
                 reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                // инициализация на основании сокета клиента объекта для отправки потока символов клиенту
                 writer = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
-                send220();
-                readMessage(); // EHLO [IPv6:::1]
-                send250commandList();
-                readMessage(); // MAIL FROM:<bgd.sao@gmail.com>
-                send250_2_1_0_Ok();
-                readMessage(); // RCPT TO:<anzhelikaShch11@gmail.com>
-                send250_2_1_5_Ok();
-                readMessage(); // DATA
-                send354();
-                String s = "";
-                while (!".".equals(s)) {
-                    s = readMessage();
+                // приветственное сообщение сервера об успешном подключении (код 220)
+                sendMessage("220 localhost SMTP LOCAL");
+                // чтение сообщения от сервера [EHLO - команда приветствие от клиента]
+                readMessage();
+                // ответ сервера на команду EHLO - код 250
+                sendMessage("250 smtp.localhost is ready");
+                // чтение сообщения от сервера [MAIL FROM - команда для указания отправителя сообщения]
+                readMessage();
+                // ответ сервера на команду MAIL FROM - код 250
+                sendMessage("250 OK");
+                // чтение сообщения от сервера [RCPT TO - команда для указания получателя сообщения]
+                readMessage();
+                // ответ сервера на команду RCPT TO - код 250
+                sendMessage("250 OK");
+                // чтение сообщения от сервера [DATA - команда для указания тела письма]
+                readMessage();
+                // ответ сервера на команду DATA - код 354 (приглашение вводить письмо) и указания строки, которой нужно закончить письмо
+                sendMessage("354 Start mail input; end with <CRLF>.<CRLF>");
+                String data = ""; // переменная, в которую записывается каждая строка сообщения от клиента
+                // чтение сообщений от клинета пока не придет строка-окончание письма (точка)
+                while (!".".equals(data)) {
+                    data = readMessage();
                 }
-                send250Ok();
-                readMessage(); // QUIT
-                send221();
+                sendMessage("250 Ok"); // ответ сервера на команду DATA - письмо получено, код 250
+                readMessage();  // чтение сообщения от сервера [QUIT - завершение соединения]
+                sendMessage("221 smtp.localhost is closing transmission channel"); // ответ сервера на команду QUIT - код 221
+
+                //закрытие потоков чтения и записи для клиента
+                reader.close();
+                writer.close();
+                clientSocket.close();
             }
 
         } catch (IOException e) {
@@ -44,38 +61,11 @@ public class ServerSMTP {
         }
     }
 
-    private void send220() {
-        sendMessage("220 localhost SMTP OWN_SERVER");
-    }
-
-    private void send221() {
-        sendMessage("221 2.0.0 Service closing transmission channel");
-    }
-
-    private void send250Ok() {
-        sendMessage("250 Ok");
-    }
-
-    private void send354() {
-        sendMessage("354 Start mail input; end with <CRLF>.<CRLF>");
-    }
-
-    private void send250_2_1_5_Ok() {
-        sendMessage("250 2.1.5 Ok");
-    }
-
-    private void send250_2_1_0_Ok() {
-        sendMessage("250 2.1.0 Ok");
-    }
-
-    private void send250commandList() {
-        sendMessage("250 smtp.local is ready");
-    }
-
+    // метод для чтения сообщений от клиента и печати этих сообщений в консоли
     private String readMessage() {
         try {
             String line = reader.readLine();
-            System.out.println(line);
+            System.out.printf("Client: %s \n", line);
             return line;
         } catch (Exception e) {
             e.printStackTrace();
@@ -83,10 +73,12 @@ public class ServerSMTP {
         return null;
     }
 
+    // метод для отправки сообщений клиенту и печати этих сообщений в консоли
     void sendMessage(String text) {
         try {
             writer.write(text + "\n");
             writer.flush();
+            System.out.printf("Server: %s \n", text);
         } catch (IOException e) {
             e.printStackTrace();
         }
